@@ -3,22 +3,38 @@ import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 
 # Fixed recipient email address
 smtp_server = 'smtp.gmail.com'
-port = '587'
-RECIPIENT_EMAIL = '############@gmail.com'   #developer mail id
-FIXED_PASSWORD = '################'  # 16 digit pass key
+port = 587
+RECIPIENT_EMAIL = '###########@gmail.com'        #Developer Mail ID
+FIXED_PASSWORD = '################'              # 16 Digit Pass_Key
 
-def send_email(subject, body, from_email):
-    """Send an email notification."""
+def send_email(subject, body, from_email, attachment_path=None):
+    """Send an email notification with optional attachment."""
     msg = MIMEMultipart()
     msg['From'] = from_email
     msg['To'] = RECIPIENT_EMAIL
     msg['Subject'] = subject
 
     msg.attach(MIMEText(body, 'plain'))
- 
+
+    if attachment_path:
+        try:
+            with open(attachment_path, 'rb') as attachment:
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(attachment.read())
+                encoders.encode_base64(part)
+                part.add_header(
+                    'Content-Disposition',
+                    f'attachment; filename= {os.path.basename(attachment_path)}'
+                )
+                msg.attach(part)
+        except Exception as e:
+            print(f"Error attaching file: {e}")
+
     try:
         with smtplib.SMTP(smtp_server, port) as server:
             server.starttls()
@@ -119,6 +135,8 @@ def main():
         with open(csv_file_path, mode='r', newline='') as file:
             headers = next(csv.reader(file))
     
+    operations_log = []
+
     while True:
         operation = input("Choose operation: write, update, delete, or exit: ").strip().lower()
 
@@ -127,6 +145,7 @@ def main():
             record = [field.strip() for field in record]  # Clean up any extra spaces
             if len(record) == len(headers):
                 write_record(csv_file_path, record)
+                operations_log.append(f"Added: {record}")
             else:
                 print("Error: Record length does not match headers length.")
         elif operation == 'update':
@@ -136,6 +155,7 @@ def main():
             new_record = [field.strip() for field in new_record]
             if len(new_record) == len(headers):
                 update_record(csv_file_path, old_record, new_record)
+                operations_log.append(f"Updated: {old_record} to {new_record}")
             else:
                 print("Error: New record length does not match headers length.")
         elif operation == 'delete':
@@ -143,6 +163,7 @@ def main():
             record = [field.strip() for field in record]
             if len(record) == len(headers):
                 delete_record(csv_file_path, record)
+                operations_log.append(f"Deleted: {record}")
             else:
                 print("Error: Record length does not match headers length.")
         elif operation == 'exit':
@@ -152,10 +173,12 @@ def main():
             print("Invalid operation. Please choose 'write', 'update', 'delete', or 'exit'.")
 
     # Notify via email after completing CSV operations
+    operations_summary = "\n".join(operations_log)
     send_email(
         "CSV Operations Completed",
-        f"Operations on the CSV file {csv_file_path} have been completed.",
-        from_email
+        f"Operations on the CSV file {csv_file_path} have been completed:\n{operations_summary}",
+        from_email,
+        attachment_path=csv_file_path  # Attach the CSV file
     )
 
 if __name__ == "__main__":
